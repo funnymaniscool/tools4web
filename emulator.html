@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PPSSPP Web Host Template</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <h1>PPSSPP Web Host Template</h1>
+    <p>Drop your <code>ppsspp.js</code>, <code>ppsspp.wasm</code>, and <code>ppsspp.data</code> into the <code>/ppsspp</code> folder, then open this page.</p>
+  </header>
+
+  <main class="container">
+    <section class="controls">
+      <label class="filepicker">
+        <input id="romInput" type="file" accept=".iso,.cso,.pbp,.elf,.prx" />
+        <span>Select PSP Game (ISO/CSO/PBP)</span>
+      </label>
+      <button id="startBtn" disabled>Start Game</button>
+      <div class="hint">
+        Tip: After you place the PPSSPP build in <code>/ppsspp</code>, adjust file names in <code>loader.js</code> if needed.
+      </div>
+    </section>
+
+    <section class="stage">
+      <canvas id="ppsspp-canvas" tabindex="0" aria-label="PPSSPP Canvas"></canvas>
+    </section>
+
+    <section class="status">
+      <h2>Status</h2>
+      <pre id="log" class="log"></pre>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <small>Template only — no PPSSPP binaries included. See README for build steps.</small>
+  </footer>
+
+  <script src="loader.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
