@@ -129,18 +129,23 @@ window.createPPSSPPModule = function(extra = {}) {
       loadScript("ppsspp/" + c.js)
         .then(() => {
           log("Loaded ppsspp/" + c.js);
-          // Initialise the runtime if EJS_Runtime is available.  Some
-          // builds (for example, Emscripten SINGLE_FILE) may run
-          // automatically without exposing EJS_Runtime.
+          // If the loaded script does not define EJS_Runtime, assume this
+          // candidate is incompatible and try the next one.  This prevents
+          // getting stuck when the standard build is present but doesn't
+          // expose the expected entry point.
+          if (typeof window.EJS_Runtime !== 'function') {
+            log("EJS_Runtime not found after loading " + c.js + "; trying next candidate...");
+            tryCandidate(index + 1);
+            return;
+          }
+          // Initialise the runtime.  Catch and report any errors.
           try {
-            if (typeof window.EJS_Runtime === 'function') {
-              window.EJS_Runtime(createPPSSPPModule()).then((mod) => {
-                window.Module = mod;
-                log("PPSSPP core ready");
-              }).catch((err) => {
-                log("Failed to initialize PPSSPP: " + err);
-              });
-            }
+            window.EJS_Runtime(createPPSSPPModule()).then((mod) => {
+              window.Module = mod;
+              log("PPSSPP core ready");
+            }).catch((err) => {
+              log("Failed to initialize PPSSPP: " + err);
+            });
           } catch (initErr) {
             log("Error during PPSSPP initialization: " + initErr);
           }
