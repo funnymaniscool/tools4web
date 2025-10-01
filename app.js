@@ -1,10 +1,19 @@
 // Basic host logic: service worker, file input, and stubs for FS mounting.
-// This template does NOT include PPSSPP binaries.
+// The template now includes the PPSSPP Web binaries and the loader will
+// automatically select whichever core (standard or libretro) is present in
+// the `ppsspp/` directory.
 
 (function(){
   const $ = (id) => document.getElementById(id);
-  const log = (msg) => { $("log").textContent += msg + "
-"; };
+  // Improve the log helper: append messages with a literal newline and guard
+  // against a missing log element.  The original implementation concatenated
+  // a newline across lines, which introduced a syntax error.
+  const log = (msg) => {
+    const logElem = $("log");
+    if (logElem) {
+      logElem.textContent += msg + "\n";
+    }
+  };
 
   // Register SW
   if ("serviceWorker" in navigator) {
@@ -52,6 +61,24 @@
       // Many Emscripten apps check location/hash/args; we try a generic approach:
       Module.arguments = [targetName];
       log("Set Module.arguments = ['" + targetName + "']");
+
+      // If the module was configured with noInitialRun, manually invoke the
+      // application's main function now that we've provided the ROM
+      // argument.  Prefer Module.callMain if present (the Emscripten
+      // convenience wrapper), otherwise fall back to the underlying `_main`
+      // export.  Surround with try/catch to log any errors.
+      try {
+        if (typeof Module.callMain === 'function') {
+          Module.callMain(Module.arguments);
+          log("Called Module.callMain() with arguments.");
+        } else if (typeof Module._main === 'function') {
+          // _main expects (argc, argv) so we just pass 0 for argv pointer
+          Module._main(Module.arguments.length, 0);
+          log("Called Module._main() manually.");
+        }
+      } catch (e) {
+        log("Error calling main: " + e);
+      }
 
     } catch (err) {
       log("Could not initialize PPSSPP Module: " + err.message);

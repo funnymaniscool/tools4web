@@ -1,15 +1,19 @@
 // Loads the PPSSPP WebAssembly bundle from /ppsspp.
-// If your filenames differ, update PPSSPP_FILES below.
-// Configure the filenames for the PPSSPP core.  The files we ship are built
-// by EmulatorJS and follow the `ppsspp_libretro.*` naming convention.  If
-// you're using different names, update these entries accordingly.  Note that
-// the Emscripten glue code will request `ppsspp_libretro.wasm`, so both
-// entries must be kept in sync.
+//
+// The loader defined further below will attempt to detect which set of
+// core files are present in the `ppsspp/` directory and use them
+// automatically.  However, the locateFile() hook inside
+// `createPPSSPPModule()` still needs to know which filenames to
+// return when the Emscripten runtime asks for its WASM.  This object
+// holds the current selection and is updated by the loader when a
+// candidate successfully loads.  You generally do not need to edit
+// these values manually unless you are using a custom build with
+// different filenames.
 const PPSSPP_FILES = {
   js:  "ppsspp_libretro.js",
   wasm:"ppsspp_libretro.wasm",
-  // The .data file is unused for this build but kept here for completeness.
-  data:"ppsspp.data"
+  // The .data file is unused for these builds but kept here for completeness.
+  data: "ppsspp.data"
 };
 
 // Expose a pre-configured Module (Emscripten) for PPSSPP if present.
@@ -37,6 +41,10 @@ window.createPPSSPPModule = function(extra = {}) {
       if (path.endsWith(".data")) return base + PPSSPP_FILES.data;
       return base + path;
     },
+    // Prevent the Emscripten runtime from automatically calling
+    // the program's main function when the module is instantiated.
+    // We'll start the program manually after mounting the ROM.
+    noInitialRun: true,
     ...extra
   };
 
@@ -51,11 +59,21 @@ window.createPPSSPPModule = function(extra = {}) {
   return Module;
 };
 
-// Dynamically load the PPSSPP JS glue, with special handling for file://.
+// Dynamically load the PPSSPP JS glue.  This implementation attempts
+// to detect which core files are present in the `ppsspp/` directory and
+// load them automatically.  See the top of this file for an overview.
 (function() {
-  const log = (msg) => document.getElementById("log").textContent += msg + "\n";
+  // Append messages to the on‑page log element if it exists.  If there
+  // is no log element (for example, during unit tests), this becomes a
+  // no‑op.
+  const log = (msg) => {
+    const logElem = document.getElementById("log");
+    if (logElem) logElem.textContent += msg + "\n";
+  };
 
-  // Helper to decode base64 into a Uint8Array.
+  // Helper to decode base64 into a Uint8Array.  Used when running from
+  // file:// to decode the embedded WASM contained in the libretro
+  // variant's embed script.
   function base64ToUint8Array(b64) {
     const binaryString = atob(b64);
     const len = binaryString.length;
@@ -66,36 +84,106 @@ window.createPPSSPPModule = function(extra = {}) {
     return bytes;
   }
 
-  if (location.protocol === 'file:') {
-    // When running from file://, load the embedded WASM base64 script first.
-    const embed = document.createElement("script");
-    embed.src = "ppsspp/wasm_base64_embed.js";
-    embed.onload = () => {
-      try {
-        // Decode and store binary for Module use
-        window.ppssppWasmBinary = base64ToUint8Array(wasmBase64);
-      } catch (err) {
-        log("Failed decoding embedded WASM: " + err);
-      }
-      // Now load the core script
-      const core = document.createElement("script");
-      core.src = "ppsspp/" + PPSSPP_FILES.js;
-      core.async = true;
-      core.onload = () => log("Loaded " + core.src);
-      core.onerror = () => log("Could not find PPSSPP at /ppsspp. Place core files there.");
-      document.head.appendChild(core);
-    };
-    embed.onerror = () => {
-      log("Could not load embedded WASM file. Please make sure wasm_base64_embed.js exists.");
-    };
-    document.head.appendChild(embed);
-  } else {
-    // On http/https, load the core script directly.
-    const script = document.createElement("script");
-    script.src = "ppsspp/" + PPSSPP_FILES.js;
-    script.async = true;
-    script.onload = () => log("Loaded " + script.src);
-    script.onerror = () => log("Could not find PPSSPP at /ppsspp. Place core files there.");
-    document.head.appendChild(script);
+  // Utility to dynamically load a JavaScript file.  Returns a Promise
+  // that resolves on success and rejects on failure.
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("Failed to load " + src));
+      document.head.appendChild(s);
+    });
   }
+
+  // List of core variants to try.  The loader will attempt each entry
+  // in order until one loads successfully.  Each entry must specify
+  // the JS and WASM filenames relative to the `ppsspp/` directory.  If
+  // `embed` is provided, it should refer to a script in the same
+  // directory that exports a global `wasmBase64` variable containing
+  // a base64‑encoded copy of the WASM.  The embed will only be
+  // loaded when running from a file:// URI.
+  const candidates = [
+    { js: "ppsspp.js", wasm: "ppsspp.wasm", embed: null },
+    { js: "ppsspp_libretro.js", wasm: "ppsspp_libretro.wasm", embed: "wasm_base64_embed.js" }
+  ];
+
+  // Attempt to load a candidate core.  This function updates
+  // PPSSPP_FILES to point at the candidate's filenames, tries to
+  // load any required embed on file://, and then loads the core JS.
+  function tryCandidate(index) {
+    if (index >= candidates.length) {
+      log("Could not find PPSSPP at /ppsspp. Place core files there.");
+      return;
+    }
+    const c = candidates[index];
+    // Update the global file map so locateFile() returns the right
+    // filenames for this candidate.
+    PPSSPP_FILES.js = c.js;
+    PPSSPP_FILES.wasm = c.wasm;
+
+    // Function to load the core JS and initialise the runtime when
+    // successful.  If loading fails, the next candidate is tried.
+    const loadCore = () => {
+      loadScript("ppsspp/" + c.js)
+        .then(() => {
+          log("Loaded ppsspp/" + c.js);
+          // Initialise the runtime if EJS_Runtime is available.  Some
+          // builds (for example, Emscripten SINGLE_FILE) may run
+          // automatically without exposing EJS_Runtime.
+          try {
+            if (typeof window.EJS_Runtime === 'function') {
+              window.EJS_Runtime(createPPSSPPModule()).then((mod) => {
+                window.Module = mod;
+                log("PPSSPP core ready");
+              }).catch((err) => {
+                log("Failed to initialize PPSSPP: " + err);
+              });
+            }
+          } catch (initErr) {
+            log("Error during PPSSPP initialization: " + initErr);
+          }
+        })
+        .catch(() => {
+          // Loading this candidate failed; try the next one.
+          tryCandidate(index + 1);
+        });
+    };
+
+    // On file://, attempt to load the embed if provided.  Without an
+    // embed there is no way to fetch the WASM, so skip to the next.
+    if (location.protocol === 'file:') {
+      if (c.embed) {
+        loadScript("ppsspp/" + c.embed)
+          .then(() => {
+            try {
+              if (typeof wasmBase64 !== 'undefined') {
+                window.ppssppWasmBinary = base64ToUint8Array(wasmBase64);
+                // Clean up the temporary global to avoid polluting the
+                // namespace.  Swallow any errors from delete since some
+                // environments may disallow deletion of global vars.
+                try { delete window.wasmBase64; } catch (_) {}
+              }
+            } catch (err) {
+              log("Failed decoding embedded WASM: " + err);
+            }
+            loadCore();
+          })
+          .catch(() => {
+            // Embed missing or failed; try the next candidate.
+            tryCandidate(index + 1);
+          });
+      } else {
+        // No embed for this candidate on file://; skip it.
+        tryCandidate(index + 1);
+      }
+    } else {
+      // http/https: load the core directly.
+      loadCore();
+    }
+  }
+
+  // Begin attempting to load the available candidates.
+  tryCandidate(0);
 })();
