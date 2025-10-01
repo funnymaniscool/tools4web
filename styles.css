@@ -1,0 +1,30 @@
+/* Minimal, legible styling */
+* { box-sizing: border-box; }
+:root { --bg:#0f1115; --card:#161923; --muted:#a5adcb; --text:#e6e9ef; --accent:#7aa2f7; }
+html,body { height:100%; }
+body {
+  margin:0; font:16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, sans-serif;
+  color:var(--text); background:linear-gradient(180deg, #0b0d12, #0f1115);
+}
+.site-header, .site-footer { text-align:center; padding:16px 12px; color:var(--muted); }
+.site-header h1 { margin:0 0 6px; color:var(--text); }
+.container { max-width:960px; margin:0 auto; padding:12px; }
+.controls {
+  display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px;
+  background:var(--card); border:1px solid #21273a; padding:12px; border-radius:14px;
+}
+.filepicker { position:relative; display:inline-flex; }
+.filepicker input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.filepicker span, button {
+  background:#1b2030; color:var(--text); border:1px solid #2a3149; border-radius:12px;
+  padding:10px 14px; cursor:pointer;
+}
+button:disabled { opacity:0.5; cursor:not-allowed; }
+.hint { color:var(--muted); }
+.stage {
+  background:var(--card); border:1px solid #21273a; border-radius:14px; padding:10px; min-height:420px;
+}
+#ppsspp-canvas { width:100%; height:400px; display:block; background:#000; border-radius:12px; outline:none; }
+.status { margin-top:12px; }
+.log { background:#0b0d12; color:#c8d3f5; padding:10px; min-height:120px; border-radius:12px; overflow:auto; border:1px solid #1a1f2e; }
+code { background:#1b2030; padding:2px 6px; border-radius:6px; border:1px solid #2a3149; }
