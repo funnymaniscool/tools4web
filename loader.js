@@ -15,8 +15,15 @@ const PPSSPP_FILES = {
 // Expose a pre-configured Module (Emscripten) for PPSSPP if present.
 window.createPPSSPPModule = function(extra = {}) {
   const canvas = document.getElementById("ppsspp-canvas");
-  const log = (msg) => document.getElementById("log").textContent += msg + "
-";
+  // Ensure log messages append a newline correctly. Use a literal "\n" string
+  // instead of accidentally breaking the string across lines, which would
+  // result in a syntax error and prevent the loader from running.
+  const log = (msg) => {
+    const logElem = document.getElementById("log");
+    if (logElem) {
+      logElem.textContent += msg + "\n";
+    }
+  };
 
   const base = "ppsspp/";
   const Module = {
