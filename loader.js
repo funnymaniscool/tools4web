@@ -153,7 +153,12 @@ window.createPPSSPPModule = function(extra = {}) {
              // reserves more memory up front so larger ISO files can be loaded.
              const moduleOpts = { INITIAL_MEMORY: DEFAULT_INITIAL_MEMORY };
              window.EJS_Runtime(createPPSSPPModule(moduleOpts)).then((mod) => {
+               // Expose the Module both on window and as a global variable.  Some
+               // callers (like app.js) reference the global "Module" variable
+               // directly, while others read window.Module.  Assigning it here
+               // ensures both references point to the same object.
                window.Module = mod;
+               try { globalThis.Module = mod; } catch (e) { /* ignore */ }
                log("PPSSPP core ready");
              }).catch((err) => {
                log("Failed to initialize PPSSPP: " + err);

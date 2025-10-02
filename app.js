@@ -38,14 +38,22 @@
 
     // Wait for PPSSPP to attach its Module (Emscripten usually exposes global 'Module')
     const ensureModule = () => new Promise((resolve, reject) => {
-      let tries = 0;
-      const t = setInterval(() => {
-        tries++;
-        if (window.Module && Module.FS && Module.FS_createDataFile) {
-          clearInterval(t); resolve(window.Module);
-        }
-        if (tries > 200) { clearInterval(t); reject(new Error("PPSSPP Module not detected.")); }
-      }, 50);
+       let tries = 0;
+       // Wait up to ~25 seconds (500 tries * 50 ms) for the PPSSPP Module to
+       // become available.  Initialising the emulator may take longer when
+       // using large memory allocations or running on slower devices.  After
+       // the limit is reached, reject to avoid hanging indefinitely.
+       const t = setInterval(() => {
+         tries++;
+         if (window.Module && Module && Module.FS && Module.FS_createDataFile) {
+           clearInterval(t); resolve(window.Module);
+           return;
+         }
+         if (tries > 500) {
+           clearInterval(t);
+           reject(new Error("PPSSPP Module not detected."));
+         }
+       }, 50);
     });
 
     try {
