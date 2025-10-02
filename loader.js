@@ -109,6 +109,15 @@ window.createPPSSPPModule = function(extra = {}) {
     { js: "ppsspp_libretro.js", wasm: "ppsspp_libretro.wasm", embed: "wasm_base64_embed.js" }
   ];
 
+  // Reserve additional memory by setting Module.INITIAL_MEMORY.  The default
+  // PPSSPP web builds allocate 512 MB of memory, which is insufficient for
+  // larger ISO files (for example, games larger than 1 GB.)  Because the
+  // WebAssembly memory is allocated when the module is initialised, we set
+  // a higher default before calling the runtime.  Feel free to lower or
+  // increase this value depending on your needs.  The current value of
+  // 2 GB reserves half of the maximum 4 GB memory allowed by modern browsers.
+  const DEFAULT_INITIAL_MEMORY = 2 * 1024 * 1024 * 1024;
+
   // Attempt to load a candidate core.  This function updates
   // PPSSPP_FILES to point at the candidate's filenames, tries to
   // load any required embed on file://, and then loads the core JS.
@@ -138,17 +147,20 @@ window.createPPSSPPModule = function(extra = {}) {
             tryCandidate(index + 1);
             return;
           }
-          // Initialise the runtime.  Catch and report any errors.
-          try {
-            window.EJS_Runtime(createPPSSPPModule()).then((mod) => {
-              window.Module = mod;
-              log("PPSSPP core ready");
-            }).catch((err) => {
-              log("Failed to initialize PPSSPP: " + err);
-            });
-          } catch (initErr) {
-            log("Error during PPSSPP initialization: " + initErr);
-          }
+           // Initialise the runtime.  Catch and report any errors.
+           try {
+             // Pass a larger INITIAL_MEMORY when creating the module.  This
+             // reserves more memory up front so larger ISO files can be loaded.
+             const moduleOpts = { INITIAL_MEMORY: DEFAULT_INITIAL_MEMORY };
+             window.EJS_Runtime(createPPSSPPModule(moduleOpts)).then((mod) => {
+               window.Module = mod;
+               log("PPSSPP core ready");
+             }).catch((err) => {
+               log("Failed to initialize PPSSPP: " + err);
+             });
+           } catch (initErr) {
+             log("Error during PPSSPP initialization: " + initErr);
+           }
         })
         .catch(() => {
           // Loading this candidate failed; try the next one.
